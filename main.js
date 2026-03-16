@@ -5,6 +5,10 @@ import {createCloudLayer} from "./clouds.js"
 
 Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJmM2JjMDdjNC1hY2U4LTQ4ZDgtODc1NS1kMzJjMzlhMWM4YzkiLCJpZCI6NDA0NDc5LCJpYXQiOjE3NzM2NTk3MTl9.euqRPcgTJmTRlW0TT3y2nO2zMwjO1LceVVbxNWZWMyU"
 
+const viewer = new Cesium.Viewer("cesiumContainer", {
+    terrainProvider: Cesium.createWorldTerrain()
+});
+
 const viewer = new Cesium.Viewer("cesiumContainer",{
 
 terrainProvider: Cesium.createWorldTerrain(),
