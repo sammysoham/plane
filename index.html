@@ -19,73 +19,96 @@
     </div>
 
     <script>
-        // Replace with your actual tokens
-        const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZDM2ZTMxYi0yNTkyLTQxZjYtOWE4Yi1mYzczOTVkZDI2YjIiLCJpZCI6NDA0NDc5LCJpYXQiOjE3NzM2NTk1MzV9.cHJIwupiDA4ptrQdFQ2I166t8c1Y2BObpatmGbK4UP4';
-        Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
+    const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZDM2ZTMxYi0yNTkyLTQxZjYtOWE4Yi1mYzczOTVkZDI2YjIiLCJpZCI6NDA0NDc5LCJpYXQiOjE3NzM2NTk1MzV9.cHJIwupiDA4ptrQdFQ2I166t8c1Y2BObpatmGbK4UP4';
+    Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
 
-        const viewer = new Cesium.Viewer('cesiumContainer', {
-            terrainProvider: Cesium.createWorldTerrain(),
-            baseLayerPicker: false,
-            navigationHelpButton: false,
-            homeButton: false,
-            sceneModePicker: false
-        });
+    // Initialize viewer with the NEW terrain method
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrain: Cesium.Terrain.fromWorldTerrain(), // Updated for newer Cesium versions
+        baseLayerPicker: false,
+        animation: false,
+        timeline: false,
+        geocoder: false,
+        selectionIndicator: false,
+        infoBox: false
+    });
 
-        // 1. Add Google Photorealistic 3D Tiles
-        async function setupTileset() {
-            try {
-                const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207); // Google Photorealistic ID
-                viewer.scene.primitives.add(tileset);
-                
-                // Cartoon "Zen" look: adjust brightness and soft shadows
-                viewer.scene.light = new Cesium.DirectionalLight({
-                    direction: new Cesium.Cartesian3(1, 0, -1)
-                });
-            } catch (error) {
-                console.log(`Error loading tileset: ${error}`);
-            }
-        }
-        setupTileset();
-
-        // 2. Simple Flight Model Variables
-        let speed = 50.0;
-        let pitch = 0, roll = 0, yaw = 0;
-
-        // 3. The "Zen" Plane (A simple placeholder box/cone)
-        const planeEntity = viewer.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(-122.4194, 37.7749, 500), // Starting in SF
-            model: { uri: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf', scale: 10.0 }
-        });
-
-        viewer.trackedEntity = planeEntity;
-
-        // 4. Input Logic
-        const keys = {};
-        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
-        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
-
-        viewer.scene.preRender.addEventListener(function(scene, time) {
-            if (keys['w']) pitch -= 0.01;
-            if (keys['s']) pitch += 0.01;
-            if (keys['a']) roll -= 0.02;
-            if (keys['d']) roll += 0.02;
+    // --- SETUP SCENERY ---
+    async function setupTileset() {
+        try {
+            const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207);
+            viewer.scene.primitives.add(tileset);
             
-            // Auto-leveling (The Zen factor)
-            pitch *= 0.98;
-            roll *= 0.95;
+            // Apply Cartoon/Zen Shader
+            tileset.customShader = new Cesium.CustomShader({
+                lightingModel: Cesium.LightingModel.PBR,
+                fragmentShaderText: `
+                    void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+                        vec3 color = material.diffuse;
+                        float lum = dot(color, vec3(0.299, 0.587, 0.114));
+                        material.diffuse = floor(color * 4.0 + 0.5) / 4.0; // Posterize
+                        if(lum < 0.2) material.diffuse *= vec3(0.9, 0.9, 1.3); // Blue shadows
+                    }
+                `
+            });
 
-            // Move logic
-            let position = planeEntity.position.getValue(time);
-            let orientation = planeEntity.orientation?.getValue(time) || Cesium.Quaternion.IDENTITY;
-            
-            // Update the position based on speed and pitch
-            // (In a full sim, you'd calculate the forward vector from the quaternion)
+            // Start over San Francisco for a good view
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(-122.4194, 37.7749, 1000)
+            });
+        } catch (e) { console.error(e); }
+    }
+    setupTileset();
+
+    // --- ZEN FLIGHT MODEL ---
+    let planeData = {
+        pos: Cesium.Cartesian3.fromDegrees(-122.4194, 37.7749, 1000),
+        hpr: new Cesium.HeadingPitchRoll(0, 0, 0), // Orientation
+        speed: 0.05
+    };
+
+    const keys = {};
+    window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+    window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
+
+    viewer.scene.preUpdate.addEventListener(function(scene, time) {
+        // Flight Sensitivity
+        const turnSpeed = 0.03;
+        const pitchSpeed = 0.02;
+
+        if (keys['w']) planeData.hpr.pitch -= pitchSpeed;
+        if (keys['s']) planeData.hpr.pitch += pitchSpeed;
+        if (keys['a']) planeData.hpr.roll -= turnSpeed;
+        if (keys['d']) planeData.hpr.roll += turnSpeed;
+        if (keys['shift']) planeData.speed = 0.15; else planeData.speed = 0.08;
+
+        // Zen Auto-Leveling (Gently returns to flat flight)
+        planeData.hpr.roll *= 0.92;
+        planeData.hpr.pitch *= 0.96;
+
+        // Apply Roll to Heading (Banking makes you turn)
+        planeData.hpr.heading += planeData.hpr.roll * 0.5;
+
+        // Calculate Movement Vector
+        const direction = new Cesium.Cartesian3();
+        const matrix = Cesium.Transforms.headingPitchRollToFixedFrame(planeData.pos, planeData.hpr);
+        Cesium.Matrix4.getTranslation(matrix, direction);
+        
+        // Move camera like you are the plane
+        viewer.camera.setView({
+            destination: planeData.pos,
+            orientation: planeData.hpr
         });
+        
+        // Move forward (Zen drift)
+        const forward = viewer.camera.direction;
+        Cesium.Cartesian3.multiplyByScalar(forward, planeData.speed, forward);
+        Cesium.Cartesian3.add(planeData.pos, forward, planeData.pos);
+    });
 
-        // 5. Atmosphere Tweak
-        viewer.scene.skyAtmosphere.hueShift = 0.1; // Shift to a dreamier blue
-        viewer.scene.fog.enabled = true;
-        viewer.scene.fog.density = 0.0002;
-    </script>
+    // Atmosphere Polish
+    viewer.scene.skyAtmosphere.hueShift = -0.1;
+    viewer.scene.fog.enabled = true;
+</script>
 </body>
 </html>
