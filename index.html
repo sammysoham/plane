@@ -1,47 +1,91 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Global Cartoon Flight Simulator</title>
-
-<script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
-<link href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-
-<style>
-body{
-margin:0;
-overflow:hidden;
-}
-
-#cesiumContainer{
-width:100%;
-height:100vh;
-}
-
-#hud{
-position:absolute;
-top:10px;
-left:10px;
-background:rgba(0,0,0,0.4);
-color:white;
-padding:10px;
-border-radius:6px;
-font-family:sans-serif;
-}
-</style>
-
+    <meta charset="UTF-8">
+    <title>Zen Flight Sim</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.108/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.108/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #87CEEB; }
+        #cesiumContainer { width: 100%; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-family: sans-serif; pointer-events: none; text-shadow: 1px 1px 4px rgba(0,0,0,0.5); }
+    </style>
 </head>
-
 <body>
+    <div id="cesiumContainer"></div>
+    <div id="ui">
+        <h1>Zen Flight</h1>
+        <p>WASD to Tilt | SHIFT to Boost</p>
+    </div>
 
-<div id="cesiumContainer"></div>
+    <script>
+        // Replace with your actual tokens
+        const CESIUM_TOKEN = 'YOUR_CESIUM_ION_TOKEN';
+        Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
 
-<div id="hud">
-W/S throttle | A/D roll | arrows pitch/yaw
-</div>
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            baseLayerPicker: false,
+            navigationHelpButton: false,
+            homeButton: false,
+            sceneModePicker: false
+        });
 
-<script type="module" src="main.js"></script>
+        // 1. Add Google Photorealistic 3D Tiles
+        async function setupTileset() {
+            try {
+                const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207); // Google Photorealistic ID
+                viewer.scene.primitives.add(tileset);
+                
+                // Cartoon "Zen" look: adjust brightness and soft shadows
+                viewer.scene.light = new Cesium.DirectionalLight({
+                    direction: new Cesium.Cartesian3(1, 0, -1)
+                });
+            } catch (error) {
+                console.log(`Error loading tileset: ${error}`);
+            }
+        }
+        setupTileset();
 
+        // 2. Simple Flight Model Variables
+        let speed = 50.0;
+        let pitch = 0, roll = 0, yaw = 0;
+
+        // 3. The "Zen" Plane (A simple placeholder box/cone)
+        const planeEntity = viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(-122.4194, 37.7749, 500), // Starting in SF
+            model: { uri: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf', scale: 10.0 }
+        });
+
+        viewer.trackedEntity = planeEntity;
+
+        // 4. Input Logic
+        const keys = {};
+        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
+
+        viewer.scene.preRender.addEventListener(function(scene, time) {
+            if (keys['w']) pitch -= 0.01;
+            if (keys['s']) pitch += 0.01;
+            if (keys['a']) roll -= 0.02;
+            if (keys['d']) roll += 0.02;
+            
+            // Auto-leveling (The Zen factor)
+            pitch *= 0.98;
+            roll *= 0.95;
+
+            // Move logic
+            let position = planeEntity.position.getValue(time);
+            let orientation = planeEntity.orientation?.getValue(time) || Cesium.Quaternion.IDENTITY;
+            
+            // Update the position based on speed and pitch
+            // (In a full sim, you'd calculate the forward vector from the quaternion)
+        });
+
+        // 5. Atmosphere Tweak
+        viewer.scene.skyAtmosphere.hueShift = 0.1; // Shift to a dreamier blue
+        viewer.scene.fog.enabled = true;
+        viewer.scene.fog.density = 0.0002;
+    </script>
 </body>
 </html>
